@@ -1,4 +1,4 @@
-// #![windows_subsystem = "windows"]
+#![windows_subsystem = "windows"]
 
 use eframe::{
     egui::{self, FontDefinitions, FontFamily, Visuals},
@@ -418,8 +418,8 @@ async fn main() {
             loop {
                 if let Ok(v) = receiver_user.try_recv() {
                     let mut t = v.split("\n");
-                    username = t.next().unwrap();
-                    password = t.next().unwrap();
+                    username = t.next().unwrap().to_string();
+                    password = t.next().unwrap().to_string();
                     break;
                 }
                 thread::sleep(Duration::from_millis(100));
@@ -432,18 +432,21 @@ async fn main() {
             loop {
                 if let Ok(v) = receiver_email.try_recv() {
                     let mut t = v.split("\n");
-                    email_from = t.next().unwrap();
-                    email_from_password = t.next().unwrap();
-                    email_to = t.next().unwrap();
+                    email_from = t.next().unwrap().to_string();
+                    email_from_password = t.next().unwrap().to_string();
+                    email_to = t.next().unwrap().to_string();
                     break;
                 }
                 thread::sleep(Duration::from_millis(100));
             }
             debug!("要监控的产品列表:{:#?}", products);
 
-            let account = Account::new("sale1@hk-qisu.com", "Wb84499549").await;
+            let account = Account::new(username.as_str(), password.as_str()).await;
 
             // let product_name = "OPA1622IDRCR";
+
+            // hashmap记录有库存是否通知
+            let mut notices = HashMap::new();
             loop {
                 for product_name in &products {
                     // 忽略空行
@@ -476,10 +479,51 @@ async fn main() {
                         .send(format!("产品: {}, 库存: {}", product_name, count))
                         .unwrap();
 
+                    // 如果对应产品有库存，但是没有记录，就发邮件通知并记录一下
+                    if count > 0 && notices.get(product_name).is_none() {
+                        send_email(
+                            email_from.as_str(),
+                            email_from_password.as_str(),
+                            email_to.as_str(),
+                            format!("{} 产品有 {} 个新库存", product_name, count).as_str(),
+                            format!("{} 产品有 {} 个新库存", product_name, count).as_str(),
+                        );
+                        notices.insert(product_name, true);
+                    }
+
+                    // 如果库存为0  就把之前的记录给删除
+                    if count == 0 && notices.get(product_name).is_some() {
+                        notices.remove(product_name);
+                    }
+
                     info!("库存:{}", count);
                 }
             }
         });
     });
     eframe::run_native(Box::new(app), options);
+}
+
+/// 发送邮件通知
+/// 173126019@qq.com
+/// jslmkwghsxdjbgji
+fn send_email(from: &str, password: &str, to: &str, title: &str, body: &str) {
+    use lettre::smtp::authentication::Credentials;
+    use lettre::{SmtpClient, Transport};
+    use lettre_email::EmailBuilder;
+
+    let email = EmailBuilder::new()
+        .from(from)
+        .to(to)
+        .subject(title)
+        .html(body)
+        .build()
+        .unwrap();
+
+    let mut mailer = SmtpClient::new_simple("smtp.qq.com")
+        .unwrap()
+        .credentials(Credentials::new(from.into(), password.into()))
+        .transport();
+
+    mailer.send(email.into()).unwrap();
 }
