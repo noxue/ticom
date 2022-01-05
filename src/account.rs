@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use thirtyfour::common::cookie::Cookie as TCookie;
 use thirtyfour::prelude::*;
 
+#[derive(Debug,Clone)]
 pub struct Account {
     client: Client,
 }

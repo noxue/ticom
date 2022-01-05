@@ -7,12 +7,19 @@ use eframe::{
 use log::{debug, info};
 use thirtyfour::support::block_on;
 use ti::account::Account;
+use tokio::sync::Mutex;
 
 use std::{
+    borrow::Borrow,
     collections::HashMap,
     fs::{self, read_to_string},
+    ops::AddAssign,
     path::Path,
-    sync::mpsc::{Receiver, Sender},
+    rc::Rc,
+    sync::{
+        mpsc::{Receiver, Sender},
+        Arc,
+    },
     thread,
     time::Duration,
 };
@@ -446,7 +453,12 @@ async fn main() {
             // let product_name = "OPA1622IDRCR";
 
             // hashmap记录有库存是否通知
-            let mut notices = HashMap::new();
+            let notices = Arc::new(Mutex::new(HashMap::new()));
+
+            // 记录当前几个任务在执行
+            let mut tasks = 0;
+            // let tasks = Mutex::new(tasks);
+
             loop {
                 for product_name in &products {
                     // 忽略空行
@@ -454,49 +466,75 @@ async fn main() {
                         continue;
                     }
 
-                    sender_ui
-                        .send(format!("正在获取 {} 的库存", product_name))
-                        .unwrap();
+                    let product_name = product_name.clone();
 
-                    let count = match account
-                        .get_store_by_product_name(product_name.as_str())
-                        .await
-                    {
-                        Ok(v) => v,
-                        Err(e) => {
-                            sender_ui
-                                .send(format!(
-                                    "获取产品 {} 库存失败，请检查产品名字是否正确",
-                                    product_name
-                                ))
-                                .unwrap();
-                            info!("获取失败:{}", e);
-                            continue;
+                    let sender_ui = sender_ui.clone();
+
+                    let email_from = email_from.clone();
+                    let email_from_password = email_from_password.clone();
+                    let email_to = email_to.clone();
+
+                    let account = account.clone();
+                    let notices = notices.clone();
+
+                    loop {
+                        // let tasks = tasks.lock().await;
+                        if tasks > 5 {
+                            tokio::time::sleep(Duration::from_millis(300)).await;
                         }
-                    };
-
-                    sender_ui
-                        .send(format!("产品: {}, 库存: {}", product_name, count))
-                        .unwrap();
-
-                    // 如果对应产品有库存，但是没有记录，就发邮件通知并记录一下
-                    if count > 0 && notices.get(product_name).is_none() {
-                        send_email(
-                            email_from.as_str(),
-                            email_from_password.as_str(),
-                            email_to.as_str(),
-                            format!("{} 产品有 {} 个新库存", product_name, count).as_str(),
-                            format!("{} 产品有 {} 个新库存", product_name, count).as_str(),
-                        );
-                        notices.insert(product_name, true);
+                        break;
                     }
 
-                    // 如果库存为0  就把之前的记录给删除
-                    if count == 0 && notices.get(product_name).is_some() {
-                        notices.remove(product_name);
-                    }
+                    tokio::spawn(async move {
+                        tasks += 1;
 
-                    info!("库存:{}", count);
+                        sender_ui
+                            .send(format!("正在获取 {} 的库存", product_name))
+                            .unwrap();
+
+                        let count = match account
+                            .get_store_by_product_name(product_name.as_str())
+                            .await
+                        {
+                            Ok(v) => v,
+                            Err(e) => {
+                                sender_ui
+                                    .send(format!(
+                                        "获取产品 {} 库存失败，请检查产品名字是否正确",
+                                        product_name
+                                    ))
+                                    .unwrap();
+                                info!("获取失败:{}", e);
+                                0 as usize
+                            }
+                        };
+
+                        sender_ui
+                            .send(format!("产品: {}, 库存: {}", product_name, count))
+                            .unwrap();
+
+                        let mut t = notices.lock().await;
+
+                        // 如果对应产品有库存，但是没有记录，就发邮件通知并记录一下
+                        if count > 0 && t.get(&product_name).is_none() {
+                            send_email(
+                                email_from.as_str(),
+                                email_from_password.as_str(),
+                                email_to.as_str(),
+                                format!("{} 产品有 {} 个新库存", product_name, count).as_str(),
+                                format!("{} 产品有 {} 个新库存", product_name, count).as_str(),
+                            );
+                            t.insert(product_name.clone(), true);
+                        }
+
+                        // 如果库存为0  就把之前的记录给删除
+                        if count == 0 && t.get(&product_name).is_some() {
+                            t.remove(&product_name);
+                        }
+
+                        info!("库存:{}", count);
+                        tasks -= 1;
+                    });
                 }
             }
         });
