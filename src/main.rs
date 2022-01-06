@@ -456,7 +456,7 @@ async fn main() {
             let notices = Arc::new(Mutex::new(HashMap::new()));
 
             // 记录当前几个任务在执行
-            let mut tasks = 0;
+            let mut tasks = vec![];
             // let tasks = Mutex::new(tasks);
 
             loop {
@@ -477,17 +477,7 @@ async fn main() {
                     let account = account.clone();
                     let notices = notices.clone();
 
-                    loop {
-                        // let tasks = tasks.lock().await;
-                        if tasks > 5 {
-                            tokio::time::sleep(Duration::from_millis(300)).await;
-                        }
-                        break;
-                    }
-
-                    tokio::spawn(async move {
-                        tasks += 1;
-
+                    let v = tokio::spawn(async move {
                         sender_ui
                             .send(format!("正在获取 {} 的库存", product_name))
                             .unwrap();
@@ -533,8 +523,23 @@ async fn main() {
                         }
 
                         info!("库存:{}", count);
-                        tasks -= 1;
                     });
+
+                    tasks.push(v);
+
+                    if tasks.len() == 6 {
+                        while let Some(task) = tasks.pop() {
+                            task.await;
+                        }
+                    }
+
+                    // loop {
+                    //     // let tasks = tasks.lock().await;
+                    //     if tasks > 0 {
+                    //         tokio::time::sleep(Duration::from_millis(300)).await;
+                    //     }
+                    //     break;
+                    // }
                 }
             }
         });
