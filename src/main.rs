@@ -527,7 +527,7 @@ async fn main() {
 
                     tasks.push(v);
 
-                    if tasks.len() == 6 {
+                    if tasks.len() == 4 {
                         while let Some(task) = tasks.pop() {
                             task.await;
                         }
