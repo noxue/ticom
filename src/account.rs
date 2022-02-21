@@ -17,59 +17,6 @@ pub struct Account {
 
 /// 一些辅助函数
 impl Account {
-    async fn login(username: &str, password: &str) -> Vec<TCookie> {
-        debug!("打开浏览器登录账号:{}", username);
-
-        let caps = DesiredCapabilities::chrome();
-        let driver = WebDriver::new("http://127.0.0.1:9515", &caps)
-            .await
-            .unwrap();
-
-
-        driver
-            .get("https://www.ti.com/secure-link-forward/?gotoUrl=https%3A%2F%2Fwww.ti.com%2F")
-            .await
-            .unwrap();
-
-        let username_input = driver
-            .find_element(By::Css("input[name='username']"))
-            .await
-            .unwrap();
-
-        username_input.send_keys(username).await.unwrap();
-
-        driver
-            .find_element(By::Id("nextbutton"))
-            .await
-            .unwrap()
-            .click()
-            .await
-            .unwrap();
-
-        let password_input = driver
-            .find_element(By::Css("input[name='password']"))
-            .await
-            .unwrap();
-        password_input.send_keys(password).await.unwrap();
-
-        driver
-            .find_element(By::Id("loginbutton"))
-            .await
-            .unwrap()
-            .click()
-            .await
-            .unwrap();
-
-        // 等待五秒钟，等待相应，防止登录反应慢
-        thread::sleep(Duration::from_secs(3));
-
-        debug!("登录完毕，获取到cookie，关闭浏览器");
-
-        let cookies = driver.get_cookies().await.unwrap();
-        driver.quit().await.unwrap();
-
-        return cookies;
-    }
 
     fn gen_default_headers() -> HeaderMap {
         let mut default_headers = HeaderMap::new();
@@ -105,22 +52,13 @@ struct Store {
 }
 
 impl Account {
-    pub async fn new(username: &str, password: &str) -> Self {
+    pub async fn new() -> Self {
         // 调用selenium 模拟登录，获取登录后的cookie
-        let cookies = Self::login(username, password).await;
+        // let cookies = Self::login(username, password).await;
 
         // 根据获取到的cookie创建 reqwest client
         let client = {
-            let mut cookie_store = cookie_store::CookieStore::default();
-
-            for cookie in &cookies {
-                let url = &Url::parse("https://www.ti.com").unwrap();
-                let c = cookie_store::Cookie::parse(
-                    format!("{}={}", cookie.name(), cookie.value()),
-                    url,
-                );
-                let _ = cookie_store.insert(c.unwrap(), url);
-            }
+            let cookie_store = cookie_store::CookieStore::default();
 
             let cookie_store =
                 std::sync::Arc::new(reqwest_cookie_store::CookieStoreMutex::new(cookie_store));

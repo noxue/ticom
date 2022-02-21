@@ -29,8 +29,6 @@ use std::process::{Command, Stdio};
 
 #[derive(Default)]
 struct TiApp {
-    username: String,
-    password: String,
     product_list: String,
     email_from: String,
     email_from_password: String,
@@ -40,8 +38,6 @@ struct TiApp {
     reciver_product_count_log: Option<Receiver<String>>,
     // 发送产品列表
     sender_product_name: Option<Sender<String>>,
-    // 发送用户信息
-    sender_user: Option<Sender<String>>,
     // 发送邮箱信息
     sender_email: Option<Sender<String>>,
 }
@@ -57,16 +53,6 @@ impl epi::App for TiApp {
         frame: &mut epi::Frame<'_>,
         _storage: Option<&dyn epi::Storage>,
     ) {
-        // 如果配置信息存在，就读取
-        if Path::new("./user.txt").exists() {
-            let data = read_to_string("./user.txt").unwrap_or("".to_owned());
-            let t = data.split("\n").map(|v| v).collect::<Vec<&str>>();
-            if t.len() == 2 {
-                self.username = t[0].to_string();
-                self.password = t[1].to_string();
-            }
-        }
-
         // 邮箱配置信息
         if Path::new("./email.txt").exists() {
             let data = read_to_string("./email.txt").unwrap_or("".to_owned());
@@ -84,38 +70,17 @@ impl epi::App for TiApp {
             self.product_list = data;
         }
 
-        thread::spawn(move || {
-            let mut cmd = Command::new(r#"./chromedriver.exe"#);
-            let output = cmd
-                .creation_flags(0x08000000)
-                .stdout(Stdio::piped())
-                .output()
-                .expect("exec error!");
-
-            println!("{}", String::from_utf8_lossy(&output.stdout));
-        });
-
         let repaint = frame.repaint_signal();
         thread::spawn(move || loop {
             thread::sleep(Duration::from_millis(100));
             repaint.request_repaint();
         });
-        // 默认黑色主题
-        // ctx.set_visuals(egui::Visuals::dark());
 
-        //Custom font install
-        // # use epaint::text::*;
-        // 1. Create a `FontDefinitions` object.
         let mut font = FontDefinitions::default();
-        // Install my own font (maybe supporting non-latin characters):
-        // 2. register the font content with a name.
         font.font_data.insert(
             "cn_font".to_owned(),
             std::borrow::Cow::Borrowed(include_bytes!("../fonts/方正标雅宋简体.TTF")),
         );
-        //font.font_data.insert("mPlus".to_string(), Cow::from(&mPlus_font[..]));
-        // 3. Set two font families to use the font, font's name must have been
-        // Put new font first (highest priority)registered in `font_data`.
         font.fonts_for_family
             .get_mut(&FontFamily::Monospace)
             .unwrap()
@@ -130,8 +95,6 @@ impl epi::App for TiApp {
 
     fn update(&mut self, ctx: &egui::CtxRef, frame: &mut epi::Frame<'_>) {
         let Self {
-            username,
-            password,
             product_list,
             email_from,
             email_from_password,
@@ -139,7 +102,6 @@ impl epi::App for TiApp {
             log_text,
             reciver_product_count_log,
             sender_product_name,
-            sender_user,
             sender_email,
         } = self;
 
@@ -158,10 +120,10 @@ impl epi::App for TiApp {
             // t.reverse();
             *log_text = "".to_owned();
 
-            let left = if t.len() as i32 - 20 < 0 {
+            let left = if t.len() as i32 - 27 < 0 {
                 0
             } else {
-                t.len() - 20
+                t.len() - 27
             };
             let right = if t.len() as i32 - 1 < 0 {
                 0
@@ -185,11 +147,13 @@ impl epi::App for TiApp {
             ui.horizontal_wrapped(|ui| {
                 ui.vertical(|ui| {
                     ui.indent("left", |ui| {
-                        ui.set_max_height(580.0);
+                        // ui.set_max_height(580.0);
+                        ui.set_height(580.0);
                         ui.set_max_width(300.0);
                         ui.set_min_width(300.0);
                         ui.heading("监控的产品列表");
                         egui::ScrollArea::vertical().show(ui, |ui| {
+                            // ui.set_height(580.0);
                             if ui.text_edit_multiline(product_list).changed() {
                                 println!("xx");
                             }
@@ -200,18 +164,6 @@ impl epi::App for TiApp {
                 ui.vertical(|ui| {
                     ui.set_min_height(580.0);
                     ui.indent("right", |ui| {
-                        ui.scope(|ui| {
-                            ui.heading("ti.com账号密码");
-                            ui.horizontal(|ui| {
-                                ui.label("账号:");
-                                ui.text_edit_singleline(username);
-                            });
-                            ui.horizontal(|ui| {
-                                ui.label("密码:");
-                                ui.text_edit_singleline(password);
-                            });
-                        });
-
                         ui.separator();
                         ui.scope(|ui| {
                             ui.heading("邮件通知配置");
@@ -232,18 +184,24 @@ impl epi::App for TiApp {
                         ui.add_space(10.0);
                         ui.scope(|ui| {
                             if ui.button("开始监控").clicked() {
+                                if product_list.is_empty() {
+                                    *log_text = "请输入产品列表，再点击 开始监控".to_owned();
+                                    return;
+                                }
+
+                                if email_from.is_empty()
+                                    || email_from_password.is_empty()
+                                    || email_to.is_empty()
+                                {
+                                    *log_text = "请输入邮箱信息，再点击 开始监控".to_owned();
+                                    return;
+                                }
+
                                 // 发送产品列表
                                 sender_product_name
                                     .as_ref()
                                     .unwrap()
                                     .send(product_list.to_string())
-                                    .unwrap();
-
-                                // 发送用户信息
-                                sender_user
-                                    .as_ref()
-                                    .unwrap()
-                                    .send(format!("{}\n{}", username, password))
                                     .unwrap();
 
                                 // 发送邮箱配置
@@ -263,7 +221,8 @@ impl epi::App for TiApp {
                         ui.heading("运行记录");
                         ui.separator();
                         egui::ScrollArea::vertical().show(ui, |ui| {
-                            ui.set_min_width(300.0);
+                            ui.set_width(410.0);
+                            ui.set_height(380.0);
                             if ui
                                 .colored_label(egui::Color32::from_rgb(0, 100, 0), log_text)
                                 .changed()
@@ -273,9 +232,6 @@ impl epi::App for TiApp {
                 });
             });
         });
-
-        // Resize the native window to be just the size we need it to be:
-        // frame.set_window_size(ctx.used_size());
 
         frame.set_window_size(egui::vec2(800.0, 600.0));
     }
@@ -287,13 +243,6 @@ impl epi::App for TiApp {
     fn save(&mut self, _storage: &mut dyn epi::Storage) {}
 
     fn on_exit(&mut self) {
-        // 保存用户信息到配置文件
-        fs::write(
-            "./user.txt",
-            format!("{}\n{}", self.username, self.password),
-        )
-        .unwrap();
-
         // 保存邮箱配置信息
         fs::write(
             "./email.txt",
@@ -306,20 +255,6 @@ impl epi::App for TiApp {
 
         // 保存产品列表
         fs::write("./products.txt", format!("{}", self.product_list)).unwrap();
-
-        //taskkill /f /t /im chromedriver.exe
-        let mut cmd = Command::new("taskkill");
-        let output = cmd
-            .creation_flags(0x08000000)
-            .arg("/f")
-            .arg("/t")
-            .arg("/im")
-            .arg("chromedriver.exe")
-            .stdout(Stdio::piped())
-            .output()
-            .expect("exec error!");
-
-        println!("{}", String::from_utf8_lossy(&output.stdout));
     }
 
     fn auto_save_interval(&self) -> std::time::Duration {
@@ -327,14 +262,10 @@ impl epi::App for TiApp {
     }
 
     fn max_size_points(&self) -> egui::Vec2 {
-        // Some browsers get slow with huge WebGL canvases, so we limit the size:
         egui::Vec2::new(1024.0, 2048.0)
     }
 
     fn clear_color(&self) -> egui::Rgba {
-        // NOTE: a bright gray makes the shadows of the windows look weird.
-        // We use a bit of transparency so that if the user switches on the
-        // `transparent()` option they get immediate results.
         egui::Color32::from_rgba_unmultiplied(12, 12, 12, 180).into()
     }
 
@@ -379,16 +310,12 @@ async fn main() {
     // 产品名称列表通道
     let (sender_product_name, receiver_product_name) = std::sync::mpsc::channel::<String>();
 
-    // 用户名列表通道
-    let (sender_user, receiver_user) = std::sync::mpsc::channel::<String>();
-
     // 邮箱信息通道
     let (sender_email, receiver_email) = std::sync::mpsc::channel::<String>();
 
     let mut app = TiApp::default();
     app.reciver_product_count_log = Some(receiver_product_count_log);
     app.sender_product_name = Some(sender_product_name);
-    app.sender_user = Some(sender_user);
     app.sender_email = Some(sender_email);
 
     thread::spawn(move || {
@@ -419,19 +346,6 @@ async fn main() {
                 thread::sleep(Duration::from_millis(100));
             }
 
-            // 一直等待，直到接收到用户信息
-            let username;
-            let password;
-            loop {
-                if let Ok(v) = receiver_user.try_recv() {
-                    let mut t = v.split("\n");
-                    username = t.next().unwrap().to_string();
-                    password = t.next().unwrap().to_string();
-                    break;
-                }
-                thread::sleep(Duration::from_millis(100));
-            }
-
             // 一直等待，直到接收到邮箱信息
             let email_from;
             let email_from_password;
@@ -448,7 +362,7 @@ async fn main() {
             }
             debug!("要监控的产品列表:{:#?}", products);
 
-            let account = Account::new(username.as_str(), password.as_str()).await;
+            let account = Account::new().await;
 
             // let product_name = "OPA1622IDRCR";
 
@@ -514,6 +428,7 @@ async fn main() {
                                 format!("{} 产品有 {} 个新库存", product_name, count).as_str(),
                                 format!("{} 产品有 {} 个新库存", product_name, count).as_str(),
                             );
+
                             t.insert(product_name.clone(), true);
                         }
 
