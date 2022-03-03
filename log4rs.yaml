@@ -15,5 +15,4 @@ appenders:
 root:
   level: debug
   appenders:
-    - stdout
     - file

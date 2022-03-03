@@ -58,17 +58,13 @@ impl Account {
 
         // 根据获取到的cookie创建 reqwest client
         let client = {
-            let cookie_store = cookie_store::CookieStore::default();
-
-            let cookie_store =
-                std::sync::Arc::new(reqwest_cookie_store::CookieStoreMutex::new(cookie_store));
 
             let default_headers = Self::gen_default_headers();
 
             reqwest::Client::builder()
                 .default_headers(default_headers.clone())
                 // .proxy(Proxy::all("http://123.128.12.87:30001").unwrap())
-                .cookie_provider(cookie_store)
+                // .cookie_provider(cookie_store)
                 .timeout(Duration::from_secs(30))
                 .build()
                 .unwrap()

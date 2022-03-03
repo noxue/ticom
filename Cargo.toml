@@ -9,28 +9,21 @@ version = "0.1.0"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-
 [dependencies]
-eframe = "0.15.0" # Gives us egui, epi and web+native backends
-log = "0.4" 
-log4rs = "1" 
-# tokio + rustls
-cookie_store = "0.15"
-image = "0.23.14"
 lettre = "0.9"
 lettre_email = "0.9"
-reqwest = {version = "0.11", features = ["cookies", "gzip"]}
-reqwest_cookie_store = "0.2"
+log = "0.4"
+log4rs = "1"
+reqwest = {version = "0.11", features = ["gzip"]}
 serde = "1"
 serde_derive = "1"
 serde_json = {version = "1", default-features = false, features = ["alloc"]}
-thirtyfour = "0.27"
+thirtyfour = "0.28"
 tokio = {version = "1", features = ["full"]}
 
-
 [profile.release]
-opt-level = 3
 debug = false
+opt-level = 3
 
 # [features]
 # default = []
